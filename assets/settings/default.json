@@ -928,7 +928,8 @@
       // The key is a parent file pattern that can contain one `*` wildcard.
       // The value is a comma-separated list of child file patterns, where
       // `${capture}` expands to the text matched by the parent's wildcard
-      // and `*` matches any text.
+      // and `${basename}`, `${extname}`, and `${dirname}` expand to the
+      // corresponding parent file attributes. `*` matches any text.
       //
       // Example: `{"*.ts": "${capture}.js, ${capture}.d.ts"}`
       "patterns": {}
