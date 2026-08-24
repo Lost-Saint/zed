@@ -6018,6 +6018,9 @@ impl ProjectPanel {
 
         div()
             .id(id.clone())
+            .when(is_nested_parent, |this| {
+                this.debug_selector(|| "NESTED_FILE_PARENT".into())
+            })
             .relative()
             .group(GROUP_NAME)
             .cursor_pointer()
@@ -6351,6 +6354,9 @@ impl ProjectPanel {
                         let preview_tabs_enabled =
                             PreviewTabsSettings::get_global(cx).enable_preview_from_project_panel;
                         let click_count = event.click_count();
+                        if is_nested_parent && click_count == 1 {
+                            project_panel.toggle_expanded(entry_id, window, cx);
+                        }
                         let focus_opened_item = click_count > 1;
                         let allow_preview = preview_tabs_enabled && click_count == 1;
                         project_panel.open_entry(entry_id, focus_opened_item, allow_preview, cx);

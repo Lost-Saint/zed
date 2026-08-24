@@ -11696,9 +11696,7 @@ async fn test_file_nesting_keyboard_navigation(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
-async fn test_file_nesting_expanded_parent_disclosure_remains_visible(
-    cx: &mut gpui::TestAppContext,
-) {
+async fn test_file_nesting_parent_controls_remain_usable(cx: &mut gpui::TestAppContext) {
     init_test(cx);
     set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js")]);
 
@@ -11725,10 +11723,33 @@ async fn test_file_nesting_expanded_parent_disclosure_remains_visible(
     });
     cx.run_until_parked();
 
+    let parent_bounds = cx
+        .debug_bounds("NESTED_FILE_PARENT")
+        .expect("nested file parent should be rendered");
+    cx.simulate_click(parent_bounds.center(), Modifiers::none());
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, &mut cx),
+        &[
+            "v root",
+            "      foo.ts  <== selected  <== marked",
+            "          foo.js"
+        ]
+    );
+
+    cx.simulate_click(parent_bounds.center(), Modifiers::none());
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, &mut cx),
+        &["v root", "      foo.ts  <== selected  <== marked"]
+    );
+
     toggle_expand_dir(&panel, "root/foo.ts", &mut cx);
     assert_eq!(
         visible_entries_as_strings(&panel, 0..10, &mut cx),
-        &["v root", "      foo.ts  <== selected", "          foo.js"]
+        &[
+            "v root",
+            "      foo.ts  <== selected  <== marked",
+            "          foo.js"
+        ]
     );
 
     assert!(
