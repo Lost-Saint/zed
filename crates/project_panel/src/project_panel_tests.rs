@@ -11593,6 +11593,62 @@ async fn test_file_nesting_glob_targets(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
+async fn test_file_nesting_directory_expansion(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, &[("*.ts", "${dirname}.config")]);
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "src": {
+                "index.ts": "",
+                "src.config": "",
+            },
+        }),
+    )
+    .await;
+    let cx = &mut cx;
+
+    toggle_expand_dir(&panel, "root/src", cx);
+    toggle_expand_dir(&panel, "root/src/index.ts", cx);
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &[
+            "v root",
+            "    v src",
+            "          index.ts  <== selected",
+            "              src.config",
+        ]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_root_directory_expansion(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, &[("index.ts", "${dirname}.config")]);
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "index.ts": "",
+            "root.config": "",
+        }),
+    )
+    .await;
+    let cx = &mut cx;
+
+    toggle_expand_dir(&panel, "root/index.ts", cx);
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &[
+            "v root",
+            "      index.ts  <== selected",
+            "          root.config",
+        ]
+    );
+}
+
+#[gpui::test]
 async fn test_file_nesting_keyboard_navigation(cx: &mut gpui::TestAppContext) {
     init_test(cx);
     set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js")]);
@@ -11636,6 +11692,48 @@ async fn test_file_nesting_keyboard_navigation(cx: &mut gpui::TestAppContext) {
     assert_eq!(
         visible_entries_as_strings(&panel, 0..10, cx),
         &["v root", "      foo.ts  <== selected"]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_expanded_parent_disclosure_remains_visible(
+    cx: &mut gpui::TestAppContext,
+) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js")]);
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(
+        "/root",
+        json!({
+            "foo.ts": "",
+            "foo.js": "",
+        }),
+    )
+    .await;
+    let project = Project::test(fs, ["/root".as_ref()], cx).await;
+    let window = cx.add_window(|window, cx| MultiWorkspace::test_new(project, window, cx));
+    let workspace = window
+        .read_with(cx, |multi_workspace, _| multi_workspace.workspace().clone())
+        .unwrap();
+    let mut cx = VisualTestContext::from_window(window.into(), cx);
+    let panel = workspace.update_in(&mut cx, |workspace, window, cx| {
+        let panel = ProjectPanel::new(workspace, window, cx);
+        workspace.add_panel(panel.clone(), window, cx);
+        workspace.open_panel::<ProjectPanel>(window, cx);
+        panel
+    });
+    cx.run_until_parked();
+
+    toggle_expand_dir(&panel, "root/foo.ts", &mut cx);
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, &mut cx),
+        &["v root", "      foo.ts  <== selected", "          foo.js"]
+    );
+
+    assert!(
+        cx.debug_bounds("ICON-ChevronDown").is_some(),
+        "expanded nested parent should keep a visible disclosure"
     );
 }
 

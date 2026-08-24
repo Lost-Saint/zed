@@ -6377,11 +6377,11 @@ impl ProjectPanel {
                     })
                     .selectable(false)
                     .when(is_nested_parent, |this| {
-                        this.toggle(is_expanded).on_toggle(cx.listener(
-                            move |project_panel, _, window, cx| {
+                        this.always_show_disclosure_icon(true)
+                            .toggle(is_expanded)
+                            .on_toggle(cx.listener(move |project_panel, _, window, cx| {
                                 project_panel.toggle_expanded(entry_id, window, cx);
-                            },
-                        ))
+                            }))
                     })
                     .when(
                         canonical_path.is_some()
@@ -8109,9 +8109,12 @@ fn dir_nesting_pairs(
         .filter_map(|entry| Some((entry.id, entry.path.file_name()?)))
         .collect();
     let names: Vec<&str> = files.iter().map(|(_, name)| *name).collect();
+    let dirname = dir_path
+        .file_name()
+        .unwrap_or_else(|| snapshot.root_name_str());
     files
         .iter()
-        .zip(patterns.nesting_parents(&names))
+        .zip(patterns.nesting_parents(&names, dirname))
         .filter_map(|((child_id, _), parent_index)| {
             let (parent_id, _) = files.get(parent_index?)?;
             Some((*child_id, *parent_id))
