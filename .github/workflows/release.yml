@@ -17,6 +17,8 @@ jobs:
         with:
           node-version: 24
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies
+        run: ./script/linux
       - name: Build
         run: cargo build --release -p zed
       - name: Package
