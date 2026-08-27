@@ -11,8 +11,22 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - v1.16.1
+          - v1.16.2
+          - v1.16.3
+          - v1.17.2
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch upstream Zed tags
+        run: git fetch https://github.com/zed-industries/zed.git --tags
+      - name: Checkout version
+        run: git checkout "${{ matrix.version }}"
+      - name: Push tag to fork
+        run: git push origin "${{ matrix.version }}"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -22,8 +36,8 @@ jobs:
       - name: Build
         run: cargo build --release -p zed
       - name: Package
-        run: tar -czf "zed-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu.tar.gz" -C target/release zed
+        run: tar -czf "zed-${{ matrix.version }}-x86_64-unknown-linux-gnu.tar.gz" -C target/release zed
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" "zed-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu.tar.gz" --generate-notes --verify-tag
+        run: gh release create "${{ matrix.version }}" "zed-${{ matrix.version }}-x86_64-unknown-linux-gnu.tar.gz" --generate-notes --verify-tag
