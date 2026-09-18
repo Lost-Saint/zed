@@ -12010,7 +12010,12 @@ async fn test_focus_follows_mouse_into_blank_area(cx: &mut gpui::TestAppContext)
     });
 }
 
-fn set_file_nesting_settings(cx: &mut TestAppContext, enabled: bool, patterns: &[(&str, &str)]) {
+fn set_file_nesting_settings(
+    cx: &mut TestAppContext,
+    enabled: bool,
+    expand: bool,
+    patterns: &[(&str, &str)],
+) {
     let patterns = patterns
         .iter()
         .map(|(parent, children)| (parent.to_string(), children.to_string()))
@@ -12021,6 +12026,7 @@ fn set_file_nesting_settings(cx: &mut TestAppContext, enabled: bool, patterns: &
                 settings.project_panel.get_or_insert_default().file_nesting =
                     Some(settings::FileNestingSettingsContent {
                         enabled: Some(enabled),
+                        expand: Some(expand),
                         patterns: Some(patterns),
                     });
             });
@@ -12048,7 +12054,12 @@ async fn setup_file_nesting_panel(
 #[gpui::test]
 async fn test_file_nesting_flat_parent_and_children(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js, ${capture}.d.ts")]);
+    set_file_nesting_settings(
+        cx,
+        true,
+        false,
+        &[("*.ts", "${capture}.js, ${capture}.d.ts")],
+    );
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12092,7 +12103,12 @@ async fn test_file_nesting_flat_parent_and_children(cx: &mut gpui::TestAppContex
 #[gpui::test]
 async fn test_file_nesting_no_chains(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js, ${capture}.d.ts")]);
+    set_file_nesting_settings(
+        cx,
+        true,
+        false,
+        &[("*.ts", "${capture}.js, ${capture}.d.ts")],
+    );
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12106,18 +12122,53 @@ async fn test_file_nesting_no_chains(cx: &mut gpui::TestAppContext) {
     .await;
     let cx = &mut cx;
 
-    // `foo.d.ts` nests `foo.d.js`, so it cannot also nest under `foo.ts`:
-    // two flat groups form instead of a chain.
+    // Transitive nesting flattens: `foo.d.js` nests under `foo.d.ts`, which
+    // nests under `foo.ts`, so everything groups directly under `foo.ts`
+    // instead of forming a displayed chain.
     toggle_expand_dir(&panel, "root/foo.ts", cx);
-    toggle_expand_dir(&panel, "root/foo.d.ts", cx);
     assert_eq!(
         visible_entries_as_strings(&panel, 0..10, cx),
         &[
             "v root",
-            "      foo.ts",
+            "      foo.ts  <== selected",
             "          foo.js",
-            "      foo.d.ts  <== selected",
             "          foo.d.js",
+            "          foo.d.ts",
+        ]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_transitive_groups_under_root(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(
+        cx,
+        true,
+        false,
+        &[("*.ts", "${capture}.js"), ("*.js", "${capture}.min.js")],
+    );
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "foo.ts": "",
+            "foo.js": "",
+            "foo.min.js": "",
+        }),
+    )
+    .await;
+    let cx = &mut cx;
+
+    // `foo.min.js` matches `foo.js`, which matches `foo.ts`: both generated
+    // files group directly under `foo.ts`, mirroring VS Code.
+    toggle_expand_dir(&panel, "root/foo.ts", cx);
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &[
+            "v root",
+            "      foo.ts  <== selected",
+            "          foo.js",
+            "          foo.min.js",
         ]
     );
 }
@@ -12125,7 +12176,7 @@ async fn test_file_nesting_no_chains(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_file_nesting_with_mixed_sort_mode(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("package.json", "yarn.lock")]);
+    set_file_nesting_settings(cx, true, false, &[("package.json", "yarn.lock")]);
     cx.update(|cx| {
         cx.update_global::<SettingsStore, _>(|store, cx| {
             store.update_user_settings(cx, |settings| {
@@ -12163,7 +12214,12 @@ async fn test_file_nesting_with_mixed_sort_mode(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_file_nesting_glob_targets(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.go", "${capture}_test.go, ${capture}.*.go")]);
+    set_file_nesting_settings(
+        cx,
+        true,
+        false,
+        &[("*.go", "${capture}_test.go, ${capture}.*.go")],
+    );
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12198,7 +12254,7 @@ async fn test_file_nesting_glob_targets(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_file_nesting_directory_expansion(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.ts", "${dirname}.config")]);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${dirname}.config")]);
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12228,7 +12284,7 @@ async fn test_file_nesting_directory_expansion(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_file_nesting_root_directory_expansion(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("index.ts", "${dirname}.config")]);
+    set_file_nesting_settings(cx, true, false, &[("index.ts", "${dirname}.config")]);
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12254,7 +12310,7 @@ async fn test_file_nesting_root_directory_expansion(cx: &mut gpui::TestAppContex
 #[gpui::test]
 async fn test_file_nesting_keyboard_navigation(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js")]);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${capture}.js")]);
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12301,7 +12357,7 @@ async fn test_file_nesting_keyboard_navigation(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_file_nesting_parent_controls_remain_usable(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js")]);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${capture}.js")]);
 
     let fs = FakeFs::new(cx.executor());
     fs.insert_tree(
@@ -12364,7 +12420,7 @@ async fn test_file_nesting_parent_controls_remain_usable(cx: &mut gpui::TestAppC
 #[gpui::test]
 async fn test_file_nesting_reveal_nested_file(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, true, &[("*.ts", "${capture}.js")]);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${capture}.js")]);
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12411,7 +12467,7 @@ async fn test_file_nesting_reveal_nested_file(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_file_nesting_setting_toggle(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    set_file_nesting_settings(cx, false, &[("*.ts", "${capture}.js")]);
+    set_file_nesting_settings(cx, false, false, &[("*.ts", "${capture}.js")]);
 
     let (panel, mut cx) = setup_file_nesting_panel(
         cx,
@@ -12446,6 +12502,187 @@ async fn test_file_nesting_setting_toggle(cx: &mut gpui::TestAppContext) {
     assert_eq!(
         visible_entries_as_strings(&panel, 0..10, visual_cx),
         &["v root", "      foo.ts"]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_expand_true_expands_by_default(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, true, &[("*.ts", "${capture}.js")]);
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "foo.ts": "",
+            "foo.js": "",
+        }),
+    )
+    .await;
+    let cx = &mut cx;
+
+    // With `expand`, nested files start visible without toggling.
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &["v root", "      foo.ts", "          foo.js"]
+    );
+
+    // Collapsing afterwards is preserved by later updates.
+    toggle_expand_dir(&panel, "root/foo.ts", cx);
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &["v root", "      foo.ts  <== selected"]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_expand_toggle_reapplies(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${capture}.js")]);
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "foo.ts": "",
+            "foo.js": "",
+        }),
+    )
+    .await;
+    let visual_cx = &mut cx;
+
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, visual_cx),
+        &["v root", "      foo.ts"]
+    );
+
+    // Enabling `expand` at runtime expands known nesting parents.
+    visual_cx.update(|_, cx| {
+        cx.update_global::<SettingsStore, _>(|store, cx| {
+            store.update_user_settings(cx, |settings| {
+                settings
+                    .project_panel
+                    .get_or_insert_default()
+                    .file_nesting
+                    .get_or_insert_default()
+                    .expand = Some(true);
+            });
+        });
+    });
+    visual_cx.run_until_parked();
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, visual_cx),
+        &["v root", "      foo.ts", "          foo.js"]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_collapse_and_expand_all(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${capture}.js")]);
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "src": {
+                "foo.ts": "",
+                "foo.js": "",
+            },
+        }),
+    )
+    .await;
+    let cx = &mut cx;
+
+    toggle_expand_dir(&panel, "root/src", cx);
+    toggle_expand_dir(&panel, "root/src/foo.ts", cx);
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &[
+            "v root",
+            "    v src",
+            "          foo.ts  <== selected",
+            "              foo.js",
+        ]
+    );
+
+    // Collapsing a directory collapses the nests under it too.
+    let (worktree_id, src_id) = panel.read_with(cx, |panel, cx| {
+        let project = panel.project.read(cx);
+        let worktree = project.worktrees(cx).next().unwrap().read(cx);
+        (
+            worktree.id(),
+            worktree.entry_for_path(rel_path("src")).unwrap().id,
+        )
+    });
+    panel.update_in(cx, |panel, window, cx| {
+        panel.collapse_all_for_entry(worktree_id, src_id, cx);
+        panel.update_visible_entries(None, false, false, window, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &["v root", "    > src"]
+    );
+
+    // Expanding everything re-expands directories and nests alike.
+    panel.update_in(cx, |panel, window, cx| {
+        panel.expand_all_for_entry_and_refresh(worktree_id, src_id, window, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &[
+            "v root",
+            "    v src",
+            "          foo.ts  <== selected",
+            "              foo.js",
+        ]
+    );
+}
+
+#[gpui::test]
+async fn test_file_nesting_expand_all_for_nested_file(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+    set_file_nesting_settings(cx, true, false, &[("*.ts", "${capture}.js")]);
+
+    let (panel, mut cx) = setup_file_nesting_panel(
+        cx,
+        json!({
+            "src": {
+                "foo.ts": "",
+                "foo.js": "",
+            },
+        }),
+    )
+    .await;
+    let cx = &mut cx;
+
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &["v root", "    > src"]
+    );
+
+    // Expanding a hidden nested file expands its directories and its
+    // nesting parent.
+    let (worktree_id, foo_js_id) = panel.read_with(cx, |panel, cx| {
+        let project = panel.project.read(cx);
+        let worktree = project.worktrees(cx).next().unwrap().read(cx);
+        (
+            worktree.id(),
+            worktree.entry_for_path(rel_path("src/foo.js")).unwrap().id,
+        )
+    });
+    panel.update_in(cx, |panel, window, cx| {
+        panel.expand_all_for_entry(worktree_id, foo_js_id, cx);
+        panel.update_visible_entries(None, false, false, window, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..10, cx),
+        &[
+            "v root",
+            "    v src",
+            "          foo.ts",
+            "              foo.js"
+        ]
     );
 }
 
