@@ -28,11 +28,33 @@ jobs:
       - name: Build Zed bundle
         run: ./script/bundle-linux
 
-      - name: Create release
+      - name: Update version tag
+        id: release
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' crates/zed/Cargo.toml | head -n 1)"
+          if [[ -z "$version" ]]; then
+            echo "Could not read the Zed version from crates/zed/Cargo.toml" >&2
+            exit 1
+          fi
+
+          tag_name="v$version"
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" != "$tag_name" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match the source version $tag_name" >&2
+            exit 1
+          fi
+
+          git tag --force "$tag_name" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$tag_name"
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            target/release/zed-linux-x86_64.tar.gz \
-            --target "${{ github.sha }}" \
-            --generate-notes
+          tag_name="${{ steps.release.outputs.tag_name }}"
+          artifact="target/release/zed-linux-x86_64.tar.gz"
+          if gh release view "$tag_name" >/dev/null 2>&1; then
+            gh release upload "$tag_name" "$artifact" --clobber
+          else
+            gh release create "$tag_name" "$artifact" --verify-tag --generate-notes
+          fi
