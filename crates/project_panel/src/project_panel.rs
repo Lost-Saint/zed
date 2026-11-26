@@ -4977,9 +4977,14 @@ impl ProjectPanel {
                                 {
                                     new_state.empty_dir_ids.insert(entry.id);
                                 }
-                                let hidden_nested_child = nesting.child_to_parent.get(&entry.id).is_some_and(|parent_id| {
-                                    new_state.expanded_dir_ids.get(&worktree_id).is_none_or(|ids| ids.binary_search(parent_id).is_err())
-                                });
+                                let hidden_nested_child =
+                                    nesting.child_to_parent.get(&entry.id).is_some_and(
+                                        |parent_id| {
+                                            new_state.expanded_dir_ids.get(&worktree_id).is_none_or(
+                                                |ids| ids.binary_search(parent_id).is_err(),
+                                            )
+                                        },
+                                    );
                                 if !hidden_nested_child {
                                     visible_worktree_entries.push(entry.to_owned());
                                 }
